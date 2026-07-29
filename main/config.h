@@ -35,7 +35,7 @@ struct MPUData {
 // =========================================================================
 #ifdef USE_DISPLAY
 #include <U8x8lib.h>
-extern U8X8_SSD1306_128X64_NONAME_SW_I2C display; // Istanza dichiarata qui
+extern U8X8_SSD1306_128X64_NONAME_SW_I2C onBoardDisplay; // Istanza dichiarata qui
 
 void setupDisplay();
 void printDisplayMessage(const char* riga1, const char* riga2 = "");
