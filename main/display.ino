@@ -16,15 +16,19 @@ void setupDisplay() {
 void printDisplayMessage(const char* riga1, const char* riga2) {
     myDisplay.clear();
     myDisplay.drawString(0, 0, riga1);
-    if (riga2[0] != '\0') {
-        myDisplay.drawString(0, 2, riga2);
-    }
+    if (riga2[0] != '\0') myDisplay.drawString(0, 2, riga2);
+}
+
+void printDisplayMessage(const char* riga1, const char* riga2, const char* riga3) {
+    myDisplay.clear();
+    myDisplay.drawString(0, 0, riga1);
+    if (riga2[0] != '\0') myDisplay.drawString(0, 2, riga2);
+    if (riga3[0] != '\0') myDisplay.drawString(0, 4, riga3);
 }
 
 void updateDisplayData(const MPUData& data) {
     myDisplay.setCursor(0, 0); myDisplay.print("Acc (m/s^2):");
     
-    // Convertiamo il raw 16-bit in m/s^2 usando il fattore di scala di 8G (4096 LSB/g) e la gravità (9.81)
     myDisplay.setCursor(0, 2); myDisplay.print("X: "); myDisplay.print((data.x / 4096.0) * 9.81, 2); myDisplay.print("  ");
     myDisplay.setCursor(0, 4); myDisplay.print("Y: "); myDisplay.print((data.y / 4096.0) * 9.81, 2); myDisplay.print("  ");
     myDisplay.setCursor(0, 6); myDisplay.print("Z: "); myDisplay.print((data.z / 4096.0) * 9.81, 2); myDisplay.print("  ");

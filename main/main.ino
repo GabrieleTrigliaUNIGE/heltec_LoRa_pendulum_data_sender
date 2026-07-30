@@ -33,56 +33,45 @@ const unsigned long ETSI_DELAY_MS = APP_TX_DUTYCYCLE; // 30 Secondi di Duty Cycl
 unsigned long lastTxTime = 0;
 bool isFirstPacket = true;
 
+RTC_DATA_ATTR int packetCounter = 0;
+
 static void prepareTxFrame(uint8_t port)
 {
     Serial.println("\n>>> APERTURA FINESTRA DI OSSERVAZIONE (1600 ms) <<<");
-    
+
+    packetCounter++;
+
+    char buf[20];
+    sprintf(buf, "Pkt N: %d", packetCounter);
+
     #ifdef USE_DISPLAY
-    printDisplayMessage("Campionamento...", "Attendere 1.6s");
+    printDisplayMessage("Campionamento...", "Attendere 1.5s", buf);
     #endif
 
-    MPUData sampleBuffer[MAX_SAMPLES];
+    appDataSize = MAX_SAMPLES * 6;
 
+    int indicePayload = 0;
+  
     for(int i = 0; i < MAX_SAMPLES; i++) {
-        unsigned long startTime = millis(); 
-
-        #ifdef USE_IMU
-        sampleBuffer[i] = readIMU();
-        #endif
-
-        #ifdef USE_DISPLAY
-        if(i == 0) {
-            updateDisplayData(sampleBuffer[i]);
-        }
-        #endif
-
-        // Pausa attiva per rispettare i 20Hz precisissimi
-        while(millis() - startTime < SAMPLE_PERIOD_MS) {
-            delay(1); 
-        }
-    }
-
-    appDataSize = MAX_SAMPLES * sizeof(MPUData); 
-    memcpy(appData, sampleBuffer, appDataSize);
-
-    // ========================================================
-    // 🔍 STAMPA DI DEBUG DEL PAYLOAD (HEX DUMP)
-    // ========================================================
-    Serial.printf(">>> FINESTRA CHIUSA. Payload: %d byte. Trasmissione...\n", appDataSize);
-    Serial.println("--- PAYLOAD HEX DUMP (Ogni riga e' un campione: X, Y, Z) ---");
-    
-    for (int i = 0; i < appDataSize; i++) {
-        Serial.printf("%02X ", appData[i]);
+        unsigned long startTime = millis();
         
-        // Vai a capo ogni 6 byte (dimensione esatta di una struct MPUData a 16 bit)
-        if ((i + 1) % 6 == 0) {
-            Serial.println(); 
-        }
+        MPUData data = readIMU();
+
+        appData[indicePayload]     = (data.x >> 8) & 0xFF; 
+        appData[indicePayload + 1] = data.x & 0xFF;        
+        appData[indicePayload + 2] = (data.y >> 8) & 0xFF; 
+        appData[indicePayload + 3] = data.y & 0xFF;        
+        appData[indicePayload + 4] = (data.z >> 8) & 0xFF; 
+        appData[indicePayload + 5] = data.z & 0xFF;        
+
+        indicePayload += 6;
+
+        // Pausa attiva di compensazione: aspetta esattamente 50ms dall'inizio del ciclo
+        while(millis() - startTime < SAMPLE_PERIOD_MS) { }
     }
-    Serial.println("------------------------------------------------------------");
-    
+
     #ifdef USE_DISPLAY
-    printDisplayMessage("Dati Inviati", "Silenzio Radio");
+        printDisplayMessage("Elaborato!", "In trasmissione", "LoRaWAN...");
     #endif
 }
 
@@ -141,6 +130,22 @@ void loop()
         case DEVICE_STATE_SEND:
         {
             prepareTxFrame(appPort);
+            // ========================================================
+            // 🔍 STAMPA DI DEBUG DEL PAYLOAD (HEX DUMP)
+            // ========================================================
+            Serial.printf(">>> FINESTRA CHIUSA. Payload: %d byte. Trasmissione...\n", appDataSize);
+            Serial.println("--- PAYLOAD HEX DUMP (Ogni riga e' un campione: X, Y, Z) ---");
+            
+            for (int i = 0; i < appDataSize; i++) {
+                Serial.printf("%02X ", appData[i]);
+        
+            // Vai a capo ogni 6 byte (dimensione esatta di una struct MPUData a 16 bit)
+            if ((i + 1) % 6 == 0) {
+                Serial.println(); 
+        }
+    }
+    Serial.println("------------------------------------------------------------");
+    
             LoRaWAN.send();
             deviceState = DEVICE_STATE_CYCLE;
             break;
@@ -180,3 +185,18 @@ void loop()
         }
     }
 }
+
+
+
+// 04 9A 40 76 FC D0 
+// 04 16 40 A0 FC 7A 
+// 03 84 40 92 FC 16 
+// 04 90 40 B2 FC 7C 
+// 04 4E 40 98 FC 64 
+// 04 D2 40 CA FD 58 
+// 04 68 41 2C FE 22 
+// 01 A2 40 3E FB 9E 
+// 02 4C 40 18 FA 6E 
+// 04 D0 40 F2 FE 74 
+// 03 DC 41 52 FE 14 
+// 04 9E 41 C4 FF AE
