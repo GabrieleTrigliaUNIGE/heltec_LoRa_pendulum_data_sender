@@ -2,31 +2,32 @@
 
 #ifdef USE_DISPLAY
 
-U8X8_SSD1306_128X64_NONAME_SW_I2C onBoardDisplay(OLED_CLOCK, OLED_DATA, OLED_RESET);
+U8X8_SSD1306_128X64_NONAME_SW_I2C myDisplay(OLED_CLOCK, OLED_DATA, OLED_RESET);
 
 void setupDisplay() {
     pinMode(VEXT, OUTPUT);
     digitalWrite(VEXT, LOW); 
     delay(50); 
     
-    onBoardDisplay.begin();
-    onBoardDisplay.setFont(u8x8_font_chroma48medium8_r);
+    myDisplay.begin();
+    myDisplay.setFont(u8x8_font_chroma48medium8_r);
 }
 
 void printDisplayMessage(const char* riga1, const char* riga2) {
-    onBoardDisplay.clear();
-    onBoardDisplay.drawString(0, 0, riga1);
+    myDisplay.clear();
+    myDisplay.drawString(0, 0, riga1);
     if (riga2[0] != '\0') {
-        onBoardDisplay.drawString(0, 2, riga2);
+        myDisplay.drawString(0, 2, riga2);
     }
 }
 
 void updateDisplayData(const MPUData& data) {
-    onBoardDisplay.setCursor(0, 0); onBoardDisplay.print("Acc (m/s^2):");
+    myDisplay.setCursor(0, 0); myDisplay.print("Acc (m/s^2):");
     
-    onBoardDisplay.setCursor(0, 2); onBoardDisplay.print("X: "); onBoardDisplay.print(data.x, 2); onBoardDisplay.print("  ");
-    onBoardDisplay.setCursor(0, 4); onBoardDisplay.print("Y: "); onBoardDisplay.print(data.y, 2); onBoardDisplay.print("  ");
-    onBoardDisplay.setCursor(0, 6); onBoardDisplay.print("Z: "); onBoardDisplay.print(data.z, 2); onBoardDisplay.print("  ");
+    // Convertiamo il raw 16-bit in m/s^2 usando il fattore di scala di 8G (4096 LSB/g) e la gravità (9.81)
+    myDisplay.setCursor(0, 2); myDisplay.print("X: "); myDisplay.print((data.x / 4096.0) * 9.81, 2); myDisplay.print("  ");
+    myDisplay.setCursor(0, 4); myDisplay.print("Y: "); myDisplay.print((data.y / 4096.0) * 9.81, 2); myDisplay.print("  ");
+    myDisplay.setCursor(0, 6); myDisplay.print("Z: "); myDisplay.print((data.z / 4096.0) * 9.81, 2); myDisplay.print("  ");
 }
 
-#endif // USE_DISPLAY
+#endif // ENABLE_DISPLAY

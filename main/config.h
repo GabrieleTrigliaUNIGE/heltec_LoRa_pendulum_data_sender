@@ -3,24 +3,19 @@
 
 #include <Arduino.h>
 
-// =========================================================================
-// STRUTTURE DATI GLOBALI
-// =========================================================================
+// --- STRUTTURE DATI GLOBALI ---
+// Ora usiamo interi a 16-bit (2 byte) per ottimizzare il payload radio
 struct MPUData {
-    float x;
-    float y;
-    float z;
+    int16_t x;
+    int16_t y;
+    int16_t z;
 };
 
-// =========================================================================
-// 1. CONFIGURAZIONE DEI FLAG
-// =========================================================================
+// --- CONFIGURAZIONE FLAG ---
 #define USE_DISPLAY
 #define USE_IMU
 
-// =========================================================================
-// 2. CONFIGURAZIONE DEI PIN HARDWARE (Heltec V4)
-// =========================================================================
+// --- CONFIGURAZIONE PIN HARDWARE ---
 #define OLED_CLOCK  18
 #define OLED_DATA   17
 #define OLED_RESET  21
@@ -28,29 +23,26 @@ struct MPUData {
 
 #define MPU_SDA     41
 #define MPU_SCL     42
-#define MPU_ADDRESS 0x68
+#define MPU_ADDRESS 0x68 // Fissato grazie ad AD0 a GND
 
-// =========================================================================
-// 3. PROTOTIPI DEL DISPLAY OLED
-// =========================================================================
+#define APP_TX_DUTYCYCLE 30000
+
+// --- PROTOTIPI DISPLAY ---
 #ifdef USE_DISPLAY
 #include <U8x8lib.h>
-extern U8X8_SSD1306_128X64_NONAME_SW_I2C onBoardDisplay; // Istanza dichiarata qui
+extern U8X8_SSD1306_128X64_NONAME_SW_I2C myDisplay; // Ricordati che avevamo cambiato in myDisplay
 
 void setupDisplay();
 void printDisplayMessage(const char* riga1, const char* riga2 = "");
 void updateDisplayData(const MPUData& data);
 #endif
 
-// =========================================================================
-// 4. PROTOTIPI DEL SENSORE IMU (MPU6050)
-// =========================================================================
+// --- PROTOTIPI MPU6050 ---
 #ifdef USE_IMU
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
-
-extern Adafruit_MPU6050 mpu; // Istanza dichiarata qui
+extern Adafruit_MPU6050 mpu;
 
 bool setupIMU();
 MPUData readIMU();

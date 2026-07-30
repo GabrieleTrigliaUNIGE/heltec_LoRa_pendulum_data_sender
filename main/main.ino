@@ -1,10 +1,6 @@
-#include <Arduino.h>
-#include "config.h"
 #include "LoRaWan_APP.h"
+#include "config.h"
 
-// ======================================================================
-// 🔑 CHIAVI LORAWAN (OTAA)
-// ======================================================================
 uint8_t devEui[] = { 0x22, 0x32, 0x33, 0x00, 0x00, 0x88, 0x88, 0x02 };
 uint8_t appEui[] = { 0x50, 0x3c, 0x3f, 0xaf, 0x13, 0x8a, 0xc5, 0xac };
 uint8_t appKey[] = { 0x9C, 0x82, 0x92, 0xF2, 0x4E, 0x7C, 0x78, 0xFB, 0xB6, 0x1A, 0xB2, 0xE0, 0x38, 0x4E, 0x43, 0x89 };
@@ -17,40 +13,77 @@ uint32_t devAddr =  ( uint32_t )0x007e6ae1;
 uint16_t userChannelsMask[6] = { 0x00FF,0x0000,0x0000,0x0000,0x0000,0x0000 };
 LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 DeviceClass_t  loraWanClass = CLASS_A;
-uint32_t appTxDutyCycle = 15000; // Questo valore non bloccherà più il codice
 
-/* Impostazioni Rete (Forzate per Streaming) */
+/* Variabile di sistema vitale per il compilatore della libreria Heltec */
+uint32_t appTxDutyCycle = APP_TX_DUTYCYCLE; 
+
+/* Impostazioni Rete */
 bool overTheAirActivation = true;
-bool loraWanAdr = false;         // FONDAMENTALE DISATTIVARLO: Dobbiamo forzare SF bassi per trasmettere 192 byte
-bool isTxConfirmed = false;      // Evitiamo di congestionare il canale richiedendo ricevute
+bool loraWanAdr = true;         
+bool isTxConfirmed = false;      
 uint8_t appPort = 2;
 uint8_t confirmedNbTrials = 4;
 
 // ======================================================================
-// VARIABILI PER CAMPIONAMENTO A 20Hz E BUFFERING
+// 📊 VARIABILI PER CAMPIONAMENTO E DUTY CYCLE MANUALE
 // ======================================================================
-#define MAX_SAMPLES 16 // 16 campioni * 12 byte = 192 byte 
-MPUData sampleBuffer[MAX_SAMPLES];
-
-int currentIndex = 0;
-unsigned long lastSampleTime = 0;
+#define MAX_SAMPLES 30 
 const unsigned long SAMPLE_PERIOD_MS = 50; // 50 ms = 20 Hz
+const unsigned long ETSI_DELAY_MS = APP_TX_DUTYCYCLE; // 30 Secondi di Duty Cycle
+unsigned long lastTxTime = 0;
+bool isFirstPacket = true;
 
-// ======================================================================
-// COSTRUZIONE DEL PAYLOAD
-// ======================================================================
 static void prepareTxFrame(uint8_t port)
 {
-    // Il buffer è già stato riempito nel loop, calcoliamo solo la dimensione
-    appDataSize = MAX_SAMPLES * sizeof(MPUData); 
+    Serial.println("\n>>> APERTURA FINESTRA DI OSSERVAZIONE (1600 ms) <<<");
     
-    // Copiamo in blocco tutta la mappa di memoria (192 byte) nel buffer LoRa
+    #ifdef USE_DISPLAY
+    printDisplayMessage("Campionamento...", "Attendere 1.6s");
+    #endif
+
+    MPUData sampleBuffer[MAX_SAMPLES];
+
+    for(int i = 0; i < MAX_SAMPLES; i++) {
+        unsigned long startTime = millis(); 
+
+        #ifdef USE_IMU
+        sampleBuffer[i] = readIMU();
+        #endif
+
+        #ifdef USE_DISPLAY
+        if(i == 0) {
+            updateDisplayData(sampleBuffer[i]);
+        }
+        #endif
+
+        // Pausa attiva per rispettare i 20Hz precisissimi
+        while(millis() - startTime < SAMPLE_PERIOD_MS) {
+            delay(1); 
+        }
+    }
+
+    appDataSize = MAX_SAMPLES * sizeof(MPUData); 
     memcpy(appData, sampleBuffer, appDataSize);
 
-    Serial.printf("\n>>> BUFFER PIENO! Trasmissione in corso di %d byte (%d campioni) via LoRa...\n", appDataSize, MAX_SAMPLES);
+    // ========================================================
+    // 🔍 STAMPA DI DEBUG DEL PAYLOAD (HEX DUMP)
+    // ========================================================
+    Serial.printf(">>> FINESTRA CHIUSA. Payload: %d byte. Trasmissione...\n", appDataSize);
+    Serial.println("--- PAYLOAD HEX DUMP (Ogni riga e' un campione: X, Y, Z) ---");
     
-    // Azzeriamo l'indice per far ripartire il campionamento
-    currentIndex = 0;
+    for (int i = 0; i < appDataSize; i++) {
+        Serial.printf("%02X ", appData[i]);
+        
+        // Vai a capo ogni 6 byte (dimensione esatta di una struct MPUData a 16 bit)
+        if ((i + 1) % 6 == 0) {
+            Serial.println(); 
+        }
+    }
+    Serial.println("------------------------------------------------------------");
+    
+    #ifdef USE_DISPLAY
+    printDisplayMessage("Dati Inviati", "Silenzio Radio");
+    #endif
 }
 
 // ======================================================================
@@ -61,21 +94,21 @@ void setup() {
     delay(3000); 
     
     Serial.println("\n==========================================");
-    Serial.println(" AVVIO NODO LORA PENDOLO - 20Hz STREAMING");
+    Serial.println(" AVVIO NODO PENDOLO ");
     Serial.println("==========================================");
 
     Mcu.begin();
     
-    #ifdef ENABLE_DISPLAY
+    #ifdef USE_DISPLAY
     setupDisplay();
-    printDisplayMessage("Connessione...", "Join OTAA in corso");
+    printDisplayMessage("Connessione...", "Join OTAA");
     #endif
 
-    #ifdef ENABLE_IMU
+    #ifdef USE_IMU
     Serial.println("Inizializzazione MPU6050...");
     if (!setupIMU()) {
         Serial.println("ERRORE: MPU6050 non trovato!");
-        #ifdef ENABLE_DISPLAY
+        #ifdef USE_DISPLAY
         printDisplayMessage("Errore I2C", "Sensore KO");
         #endif
         while (1) { delay(10); } 
@@ -95,12 +128,13 @@ void loop()
             LoRaWAN.generateDeveuiByChipID();
 #endif
             LoRaWAN.init(loraWanClass, loraWanRegion);
-            // La libreria usa SF di default basso (SF7) al primo avvio
+
+            deviceState = DEVICE_STATE_JOIN;
             break;
         }
         case DEVICE_STATE_JOIN:
         {
-            Serial.println("Tentativo di Join OTAA...");
+            Serial.println("Tentativo di Join OTAA alla rete...");
             LoRaWAN.join();
             break;
         }
@@ -113,41 +147,30 @@ void loop()
         }
         case DEVICE_STATE_CYCLE:
         {
-            // INTERCETTATO: Non diamo il controllo temporale a LoRaWAN
-            // Passiamo direttamente alla nostra logica di campionamento
-            deviceState = DEVICE_STATE_SLEEP; 
+            // MICRO-SONNO di 500ms. L'ESP32 NON fa il Deep Sleep, 
+            // ma salva energia e tiene attivi USB e OLED.
+            txDutyCycleTime = 500; 
+            LoRaWAN.cycle(txDutyCycleTime);
+            deviceState = DEVICE_STATE_SLEEP;
             break;
         }
         case DEVICE_STATE_SLEEP:
         {
-            // =====================================================
-            // LOGICA DI CAMPIONAMENTO CONTINUO (NON BLOCCANTE)
-            // =====================================================
-            if (millis() - lastSampleTime >= SAMPLE_PERIOD_MS) {
-                lastSampleTime = millis(); // Resetta il cronometro dei 50ms
-
-                #ifdef ENABLE_IMU
-                sampleBuffer[currentIndex] = readIMU();
-                #endif
-
-                // Aggiorniamo il display SOLO sul primo campione del ciclo per evitare lag
-                #ifdef ENABLE_DISPLAY
-                if (currentIndex == 0) {
-                    updateDisplayData(sampleBuffer[currentIndex]);
-                }
-                #endif
-
-                currentIndex++;
-
-                // Se abbiamo raccolto 16 campioni (192 byte totali, ~800 millisecondi trascorsi)
-                // Usciamo da questa fase e inneschiamo la trasmissione radio
-                if (currentIndex >= MAX_SAMPLES) {
-                    deviceState = DEVICE_STATE_SEND;
+            // Ripristinato il VERO sleep per scaricare i pacchetti radio (risolve il blocco OTAA!)
+            LoRaWAN.sleep(loraWanClass);
+            
+            // Quando si sveglia, la libreria tenta di spedire di nuovo. 
+            // Noi intercettiamo l'azione e imponiamo la legge di ETSI (1 invio ogni 30 secondi).
+            if (deviceState == DEVICE_STATE_SEND) {
+                if (isFirstPacket || (millis() - lastTxTime >= ETSI_DELAY_MS)) {
+                    isFirstPacket = false;
+                    lastTxTime = millis();
+                    // Via libera per il SEND
+                } else {
+                    // Non è ancora passato un minuto. Torna a fare micro-sonni.
+                    deviceState = DEVICE_STATE_CYCLE;
                 }
             }
-            
-            // FONDAMENTALE: Non chiamiamo mai LoRaWAN.sleep()
-            // L'ESP32 rimarrà sempre acceso, scansionando i 50ms
             break;
         }
         default:
