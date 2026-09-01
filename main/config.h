@@ -4,7 +4,6 @@
 #include <Arduino.h>
 
 // --- STRUTTURE DATI GLOBALI ---
-// Ora usiamo interi a 16-bit (2 byte) per ottimizzare il payload radio
 struct MPUData {
     int16_t x;
     int16_t y;
@@ -23,18 +22,28 @@ struct MPUData {
 
 #define MPU_SDA     41
 #define MPU_SCL     42
-#define MPU_ADDRESS 0x68 // Fissato grazie ad AD0 a GND
+#define MPU_ADDRESS 0x68 
+
+#define BATTERY_PIN 1
+#define BATTERY_CTRL_PIN 37
 
 #define APP_TX_DUTYCYCLE 30000
+
+// --- VARIABILE DI STATO RICARICA ---
+// Questa variabile sopravvive al Deep Sleep dell'ESP32
+extern RTC_DATA_ATTR bool isRecovering;
 
 // --- PROTOTIPI DISPLAY ---
 #ifdef USE_DISPLAY
 #include <U8x8lib.h>
-extern U8X8_SSD1306_128X64_NONAME_SW_I2C myDisplay; // Ricordati che avevamo cambiato in myDisplay
+extern U8X8_SSD1306_128X64_NONAME_SW_I2C myDisplay; 
 
 void setupDisplay();
 void printDisplayMessage(const char* riga1, const char* riga2 = "");
-void updateDisplayData(const MPUData& data);
+void printDisplayMessage(const char* riga1, const char* riga2, const char* riga3);
+void updateDisplayData(int packetNum);
+void updateDisplayData(int packetNum, float volt);
+void showChargingScreen(float volt, int percentage);
 #endif
 
 // --- PROTOTIPI MPU6050 ---
@@ -48,5 +57,9 @@ bool setupIMU();
 MPUData readIMU();
 void printIMUData(const MPUData& data);
 #endif
+
+// --- PROTOTIPI BMS (Battery Management System) ---
+float readBatteryVoltage();
+void checkBatterySafety();
 
 #endif // CONFIG_H

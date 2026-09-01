@@ -13,20 +13,14 @@ uint32_t devAddr =  ( uint32_t )0x007e6ae1;
 uint16_t userChannelsMask[6] = { 0x00FF,0x0000,0x0000,0x0000,0x0000,0x0000 };
 LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 DeviceClass_t  loraWanClass = CLASS_A;
-
-/* Variabile di sistema vitale per il compilatore della libreria Heltec */
 uint32_t appTxDutyCycle = APP_TX_DUTYCYCLE; 
 
-/* Impostazioni Rete */
 bool overTheAirActivation = true;
 bool loraWanAdr = true;         
 bool isTxConfirmed = false;      
 uint8_t appPort = 2;
 uint8_t confirmedNbTrials = 4;
 
-// ======================================================================
-// 📊 VARIABILI PER CAMPIONAMENTO E DUTY CYCLE MANUALE
-// ======================================================================
 #define MAX_SAMPLES 30 
 const unsigned long SAMPLE_PERIOD_MS = 100; // 100 ms = 10 Hz
 const unsigned long ETSI_DELAY_MS = APP_TX_DUTYCYCLE; // 30 Secondi di Duty Cycle
@@ -38,7 +32,6 @@ RTC_DATA_ATTR int packetCounter = 0;
 static void prepareTxFrame(uint8_t port)
 {
     Serial.println("\n>>> APERTURA FINESTRA DI OSSERVAZIONE (3000 ms) <<<");
-
     packetCounter++;
 
     char buf[20];
@@ -49,7 +42,6 @@ static void prepareTxFrame(uint8_t port)
     #endif
 
     appDataSize = MAX_SAMPLES * 6;
-
     int indicePayload = 0;
   
     for(int i = 0; i < MAX_SAMPLES; i++) {
@@ -66,18 +58,14 @@ static void prepareTxFrame(uint8_t port)
 
         indicePayload += 6;
 
-        // Pausa attiva di compensazione: aspetta esattamente 50ms dall'inizio del ciclo
         while(millis() - startTime < SAMPLE_PERIOD_MS) { }
     }
 
     #ifdef USE_DISPLAY
-        printDisplayMessage("Elaborato!", "In trasmissione", "LoRaWAN...");
+        updateDisplayData(packetCounter);
     #endif
 }
 
-// ======================================================================
-// 🚀 SETUP & LOOP
-// ======================================================================
 void setup() {
     Serial.begin(115200);
     delay(3000); 
@@ -90,6 +78,35 @@ void setup() {
     
     #ifdef USE_DISPLAY
     setupDisplay();
+    #endif
+
+    // 1. Controlla se la batteria è in fin di vita
+    checkBatterySafety();
+
+    // 2. Se ci stiamo riprendendo da un'ibernazione (isRecovering = true)
+    // blocchiamo l'avvio del pendolo finché la batteria non è al 100% (4.15V)
+    if (isRecovering) {
+        float volt = readBatteryVoltage();
+        while (volt < 4.15) {
+            int perc = (int)((volt - 3.3) / (4.2 - 3.3) * 100.0);
+            if (perc > 100) perc = 100;
+            if (perc < 0) perc = 0;
+
+            Serial.printf("[RICARICA] Sistema in Pausa. Ricarica al %d%% (%.2fV)\n", perc, volt);
+            
+            #ifdef USE_DISPLAY
+            showChargingScreen(volt, perc);
+            #endif
+            
+            delay(5000); // Aggiorna schermo ogni 5 secondi
+            volt = readBatteryVoltage();
+        }
+        
+        // Raggiunto il 100%, abbassiamo la bandierina e sblocchiamo il sistema!
+        isRecovering = false; 
+    }
+
+    #ifdef USE_DISPLAY
     printDisplayMessage("Connessione...", "Join OTAA");
     #endif
 
@@ -117,7 +134,6 @@ void loop()
             LoRaWAN.generateDeveuiByChipID();
 #endif
             LoRaWAN.init(loraWanClass, loraWanRegion);
-
             deviceState = DEVICE_STATE_JOIN;
             break;
         }
@@ -129,22 +145,25 @@ void loop()
         }
         case DEVICE_STATE_SEND:
         {
-            prepareTxFrame(appPort);
-            // ========================================================
-            // 🔍 STAMPA DI DEBUG DEL PAYLOAD (HEX DUMP)
-            // ========================================================
-            Serial.printf(">>> FINESTRA CHIUSA. Payload: %d byte. Trasmissione...\n", appDataSize);
-            Serial.println("--- PAYLOAD HEX DUMP (Ogni riga e' un campione: X, Y, Z) ---");
+            // --- 1. PRE-FLIGHT CHECK (Appena svegliati) ---
+            checkBatterySafety();
+            float currentVolt = readBatteryVoltage();
             
+            // --- 2. AGGIORNA SCHERMO (Prima di bloccare il micro con il campionamento) ---
+            #ifdef USE_DISPLAY
+                // Passiamo packetCounter + 1 perché stiamo per preparare il prossimo pacchetto
+                updateDisplayData(packetCounter + 1, currentVolt); 
+            #endif
+            
+            prepareTxFrame(appPort);
+            
+            // Debug Payload Hex
+            Serial.printf(">>> FINESTRA CHIUSA. Payload: %d byte. Trasmissione...\n", appDataSize);
             for (int i = 0; i < appDataSize; i++) {
                 Serial.printf("%02X ", appData[i]);
-        
-            // Vai a capo ogni 6 byte (dimensione esatta di una struct MPUData a 16 bit)
-            if ((i + 1) % 6 == 0) {
-                Serial.println(); 
-        }
-    }
-    Serial.println("------------------------------------------------------------");
+                if ((i + 1) % 6 == 0) Serial.println(); 
+            }
+            Serial.println("------------------------------------------------------------");
     
             LoRaWAN.send();
             deviceState = DEVICE_STATE_CYCLE;
@@ -152,8 +171,6 @@ void loop()
         }
         case DEVICE_STATE_CYCLE:
         {
-            // MICRO-SONNO di 500ms. L'ESP32 NON fa il Deep Sleep, 
-            // ma salva energia e tiene attivi USB e OLED.
             txDutyCycleTime = 500; 
             LoRaWAN.cycle(txDutyCycleTime);
             deviceState = DEVICE_STATE_SLEEP;
@@ -161,18 +178,13 @@ void loop()
         }
         case DEVICE_STATE_SLEEP:
         {
-            // Ripristinato il VERO sleep per scaricare i pacchetti radio (risolve il blocco OTAA!)
             LoRaWAN.sleep(loraWanClass);
             
-            // Quando si sveglia, la libreria tenta di spedire di nuovo. 
-            // Noi intercettiamo l'azione e imponiamo la legge di ETSI (1 invio ogni 30 secondi).
             if (deviceState == DEVICE_STATE_SEND) {
                 if (isFirstPacket || (millis() - lastTxTime >= ETSI_DELAY_MS)) {
                     isFirstPacket = false;
                     lastTxTime = millis();
-                    // Via libera per il SEND
                 } else {
-                    // Non è ancora passato un minuto. Torna a fare micro-sonni.
                     deviceState = DEVICE_STATE_CYCLE;
                 }
             }
@@ -185,4 +197,3 @@ void loop()
         }
     }
 }
-

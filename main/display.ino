@@ -26,12 +26,52 @@ void printDisplayMessage(const char* riga1, const char* riga2, const char* riga3
     if (riga3[0] != '\0') myDisplay.drawString(0, 4, riga3);
 }
 
-void updateDisplayData(const MPUData& data) {
-    myDisplay.setCursor(0, 0); myDisplay.print("Acc (m/s^2):");
-    
-    myDisplay.setCursor(0, 2); myDisplay.print("X: "); myDisplay.print((data.x / 4096.0) * 9.81, 2); myDisplay.print("  ");
-    myDisplay.setCursor(0, 4); myDisplay.print("Y: "); myDisplay.print((data.y / 4096.0) * 9.81, 2); myDisplay.print("  ");
-    myDisplay.setCursor(0, 6); myDisplay.print("Z: "); myDisplay.print((data.z / 4096.0) * 9.81, 2); myDisplay.print("  ");
+void updateDisplayData(int packetNum) {
+    float volt = readBatteryVoltage();
+    updateDisplayData(packetNum, volt); // Passa la palla alla Versione 2
 }
 
-#endif // ENABLE_DISPLAY
+void updateDisplayData(int packetNum, float volt) {
+    myDisplay.clear();
+    myDisplay.setCursor(0, 0);
+    myDisplay.print("-- STATO NODO --");
+
+    myDisplay.setCursor(0, 2);
+    myDisplay.print("V_Read: ");
+    myDisplay.print(volt, 2); 
+    myDisplay.print(" V");
+
+    myDisplay.setCursor(0, 4);
+    if (volt > 3.95) {
+        myDisplay.print("Bat: ALIM. USB");
+    } else if (volt < 1.0) {
+        myDisplay.print("Bat: NON RILEVATA");
+    } else {
+        myDisplay.print("Bat: ALIM. LIPO");
+    }
+
+    myDisplay.setCursor(0, 6);
+    myDisplay.print("Pkt: #");
+    myDisplay.print(packetNum);
+}
+
+void showChargingScreen(float volt, int percentage) {
+    myDisplay.clear();
+    myDisplay.setCursor(0, 0); 
+    myDisplay.print("== IN CARICA ==");
+    
+    myDisplay.setCursor(0, 2); 
+    myDisplay.print("Livello: "); 
+    myDisplay.print(percentage); 
+    myDisplay.print("%");
+    
+    myDisplay.setCursor(0, 4); 
+    myDisplay.print("Tensione: "); 
+    myDisplay.print(volt, 2); 
+    myDisplay.print("V");
+    
+    myDisplay.setCursor(0, 6); 
+    myDisplay.print("Attendere...");
+}
+
+#endif

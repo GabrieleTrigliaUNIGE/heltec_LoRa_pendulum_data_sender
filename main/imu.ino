@@ -15,7 +15,7 @@ bool setupIMU() {
     }
     
     mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
     
     return true;
 }
