@@ -21,7 +21,7 @@ bool isTxConfirmed = false;
 uint8_t appPort = 2;
 uint8_t confirmedNbTrials = 4;
 
-#define MAX_SAMPLES 30 
+#define MAX_SAMPLES 40 
 const unsigned long SAMPLE_PERIOD_MS = 100; // 100 ms = 10 Hz
 const unsigned long ETSI_DELAY_MS = APP_TX_DUTYCYCLE; // 30 Secondi di Duty Cycle
 unsigned long lastTxTime = 0;
@@ -31,14 +31,14 @@ RTC_DATA_ATTR int packetCounter = 0;
 
 static void prepareTxFrame(uint8_t port)
 {
-    Serial.println("\n>>> APERTURA FINESTRA DI OSSERVAZIONE (3000 ms) <<<");
+    Serial.println("\n>>> APERTURA FINESTRA DI OSSERVAZIONE (4000 ms) <<<");
     packetCounter++;
 
     char buf[20];
     sprintf(buf, "Pkt N: %d", packetCounter);
 
     #ifdef USE_DISPLAY
-    printDisplayMessage("Campionamento...", "Attendere 3 s", buf);
+    printDisplayMessage("Campionamento...", "Attendere 4 s", buf);
     #endif
 
     appDataSize = MAX_SAMPLES * 6;
