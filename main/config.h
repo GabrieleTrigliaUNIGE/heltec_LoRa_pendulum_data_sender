@@ -27,7 +27,7 @@ struct MPUData {
 #define BATTERY_PIN 1
 #define BATTERY_CTRL_PIN 37
 
-#define APP_TX_DUTYCYCLE 30000
+#define APP_TX_DUTYCYCLE 40000
 
 // --- VARIABILE DI STATO RICARICA ---
 // Questa variabile sopravvive al Deep Sleep dell'ESP32

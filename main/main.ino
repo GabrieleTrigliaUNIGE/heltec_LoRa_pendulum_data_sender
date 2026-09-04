@@ -16,7 +16,8 @@ DeviceClass_t  loraWanClass = CLASS_A;
 uint32_t appTxDutyCycle = APP_TX_DUTYCYCLE; 
 
 bool overTheAirActivation = true;
-bool loraWanAdr = true;         
+bool loraWanAdr = true;
+// uint8_t appDr = 5;     // if ADR false    
 bool isTxConfirmed = false;      
 uint8_t appPort = 2;
 uint8_t confirmedNbTrials = 4;
