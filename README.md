@@ -1,54 +1,63 @@
-# Heltec V4 MPU6050 LoRa Node
+# Heltec V3 MPU6050 LoRa Node
 
-Questo progetto fa parte dello sviluppo di un nodo sensore basato su **Heltec WiFi LoRa V4** (con chip ESP32-S3) e accelerometro **MPU6050**. L'obiettivo finale dell'intero sistema è il monitoraggio dinamico di un pendolo, campionandone i dati accelerometrici sui tre assi (X, Y, Z) per poi trasmetterli a un gateway tramite protocollo LoRaWAN/LoRa P2P. I dati raccolti saranno poi resi disponibili via MQTT per l'analisi in tempo reale su un nodo subscriber (es. MacBook o dashboard Node-RED/Grafana).
+This project is part of the development of a sensor node based on the **Heltec WiFi LoRa 32 V3** (featuring the ESP32-S3 chip) and the **MPU6050** accelerometer. The ultimate goal of the entire system is the dynamic monitoring of a pendulum by sampling its accelerometric data across three axes (X, Y, Z), and subsequently transmitting it to a gateway via the LoRaWAN/LoRa P2P protocol. The collected data will then be made available via MQTT for real-time analysis on a subscriber node (e.g., a MacBook or a Node-RED/Grafana dashboard).
 
-Questa specifica sezione del progetto implementa il **campionamento locale**, la **gestione modulare dell'hardware** e il **feedback visivo** (su display OLED e porta seriale nativa USB-CDC) per preparare e validare i dati prima della successiva fase di trasmissione RF.
-
----
-
-## Architettura del Software
-
-Il codice è stato ingegnerizzato seguendo un approccio altamente modulare in C++, pensato per facilitare il debug e preparare l'inserimento dello stack LoRa e del client MQTT. 
-
-Il progetto utilizza un unico punto di ingresso per le configurazioni, demandando le implementazioni a file sorgente separati:
-
-- `src/config.h`: Il cuore delle definizioni. Contiene i macro-flag di attivazione moduli, il pinout dell'hardware (per Heltec V4 e sensori I2C personalizzati), la struttura dati `MPUData` (che incapsula X, Y, Z) e i prototipi delle funzioni.
-- `src/display.cpp`: Implementazione del display OLED (U8g2 con bit-banging I2C software per evitare conflitti bus).
-- `src/imu.cpp`: Inizializzazione e lettura sicura dell'MPU6050 (con risoluzione dei problemi di instradamento I2C tipici dell'ESP32-S3).
-- `src/main.cpp`: Il controllore di alto livello, che orchestra le letture dei sensori e la stampa dei dati.
+This specific section of the project implements **local sampling**, **modular hardware management**, and **visual feedback** (on the OLED display and native USB-CDC serial port) to prepare and validate the data before the upcoming RF transmission phase.
 
 ---
 
-## Collegamenti Hardware (Wiring)
+## Software Architecture
 
-Il modulo radio SX1262 e il display OLED condividono le stesse linee di alimentazione interne. Per garantire una comunicazione stabile con l'MPU6050, il bus I2C è stato mappato su pin sicuri tramite il *pin muxing* dell'ESP32-S3, evitando interferenze.
+The code has been engineered following a highly modular approach in C++, designed to facilitate debugging and prepare for the integration of the LoRa stack and the MQTT client. 
 
-| MPU6050 Pin | Heltec V4 Pin (ESP32-S3) | Note |
+The project uses a single entry point for configurations, delegating the implementations to separate source files (organized via tabs or a `src` folder in the Arduino IDE):
+
+- `config.h`: The core of the definitions. It contains the macro-flags for module activation, the hardware pinout (for the Heltec V3 and custom I2C sensors), the `MPUData` data structure (which encapsulates X, Y, Z), and function prototypes.
+- `display.cpp`: Implementation of the OLED display (U8g2 utilizing software I2C bit-banging to prevent bus conflicts).
+- `imu.cpp`: Initialization and safe reading of the MPU6050 (resolving I2C routing issues typical of the ESP32-S3).
+- The main `.ino` file: The high-level controller that orchestrates sensor readings and data output.
+
+---
+
+## Hardware Connections (Wiring)
+
+The SX1262 radio module and the OLED display share the same internal power lines. To ensure stable communication with the MPU6050, the I2C bus has been mapped to safe pins via the ESP32-S3's *pin muxing*, effectively avoiding interference.
+
+| MPU6050 Pin | Heltec V3 Pin (ESP32-S3) | Notes |
 | :---: | :---: | :--- |
-| **VCC** | `3.3V` | Alimentazione logica (Se instabile, usare un condensatore) |
-| **GND** | `GND` | Massa comune |
-| **AD0** | `GND` | Massa comune per il corretto indirizzo (0x68) |
-| **SDA** | `GPIO 41` | Linea Dati (Riassegnata via software) |
-| **SCL** | `GPIO 42` | Linea Clock (Riassegnata via software) |
+| **VCC** | `3.3V` | Logic power supply (If unstable, add a decoupling capacitor) |
+| **GND** | `GND` | Common ground |
+| **AD0** | `GND` | Common ground for the correct I2C address (0x68) |
+| **SDA** | `GPIO 41` | Data Line (Reassigned via software) |
+| **SCL** | `GPIO 42` | Clock Line (Reassigned via software) |
 
-> **Attenzione per Heltec V4:** Il display OLED e l'antenna LoRa sono alimentati attraverso il pin `VEXT` (`GPIO 36`). È fondamentale portarlo a stato logico basso (`LOW`) nel `setup()` per alimentare le periferiche.
+> **Attention for Heltec V3:** The OLED display and the LoRa antenna are powered through the `VEXT` pin (`GPIO 36`). It is essential to set it to a low logic state (`LOW`) within the `setup()` function to power these peripherals.
 >
-> ⚠️ **MOLTO IMPORTANTE:** Non accendere mai la scheda (né via USB né via batteria) senza aver preventivamente avvitato l'antenna LoRa. Una trasmissione senza carico (antenna) danneggerà irrimediabilmente l'amplificatore RF del modulo SX1262.
+> ⚠️ **VERY IMPORTANT:** Never power on the board (neither via USB nor battery) without having first attached the LoRa antenna. Transmitting without a load (antenna) will irreparably damage the RF amplifier of the SX1262 module.
 
 ---
 
-## Ambiente di Sviluppo
+## Development Environment
 
-Il progetto è sviluppato e compilato utilizzando **PlatformIO** (estensione per Visual Studio Code). 
+The project is developed and compiled using the **Arduino IDE**. To properly compile the code for the Heltec V3 and manage the required libraries, follow the configuration steps below.
 
-### Dipendenze (`platformio.ini`)
-Le librerie principali utilizzate sono:
-- `adafruit/Adafruit MPU6050` (e dipendenze associate)
-- `olikraus/U8g2` (per la gestione ottimizzata del display OLED)
+### 1. Board Manager Installation (Heltec ESP32 Series)
+To add support for the Heltec V3 board in the Arduino IDE, follow the official Heltec guide:
+1. Go to **File** -> **Preferences** (or **Arduino IDE** -> **Settings** on macOS).
+2. In the **Additional Boards Manager URLs** field, paste the following link (if you have multiple URLs, separate them with a comma):
+   `https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series/releases/download/1.0.0/package_heltec_esp32_index.json`
+3. Click **OK**.
+4. Go to **Tools** -> **Board** -> **Boards Manager...**
+5. Search for `Heltec ESP32` and install the package provided by Heltec.
 
-### Flag di Compilazione (Build Flags)
-Per abilitare correttamente l'uscita della console seriale tramite l'interfaccia USB nativa dell'ESP32-S3 (senza passare per l'UART legacy), il file `platformio.ini` include:
-```ini
-build_flags = 
-    -D ARDUINO_USB_MODE=1
-    -D ARDUINO_USB_CDC_ON_BOOT=1
+### 2. Library Management
+The main libraries required for operation must be installed via the Arduino IDE *Library Manager* (`Sketch` -> `Include Library` -> `Manage Libraries...`):
+- **`Adafruit MPU6050`** (ensure you also install all associated dependencies required by Adafruit, such as `Adafruit Unified Sensor` and `Adafruit BusIO`).
+- **`U8g2`** by *oliver* (for optimized OLED display management).
+
+### 3. Board and Serial Configuration (Tools Menu)
+To correctly enable the serial console output via the ESP32-S3's native USB interface (bypassing the legacy UART), it is crucial to set the following parameters in the Arduino IDE `Tools` menu prior to compiling:
+
+- **Board**: `Heltec WiFi LoRa 32(V3) / Wireless shell(V3) / ...` 
+- **USB CDC On Boot**: `Enabled` *(Crucial for reading data on the native Serial Monitor)*
+- **USB Mode**: `Hardware CDC and JTAG`
