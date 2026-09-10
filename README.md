@@ -35,6 +35,15 @@ internet e puoi registrarlo lì).
 2. `pio run -t upload` (o build/upload da VS Code + estensione PlatformIO)
 3. `pio device monitor` per vedere il join e gli invii
 
+## Display OLED per il debug
+
+Il firmware ora scrive sull'OLED integrato (via U8g2, I2C software su
+SCL=18/SDA=17/RST=21) lo stato di ogni fase: init radio, tentativi di join
+OTAA con codice errore e DevEUI, join riuscito, e stato di ogni uplink
+(inviato / errore / downlink ricevuto). Utile per fare debug sul campo senza
+monitor seriale collegato, es. per verificare a colpo d'occhio se il device
+sta ancora ritentando il join e con quale errore.
+
 ## Note
 
 - Pin radio: NSS=8, DIO1=14, RST=12, BUSY=13 (SX1262).
